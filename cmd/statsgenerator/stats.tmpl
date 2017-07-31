@@ -1,0 +1,8 @@
+t := stats.NewTimer("{{.LowercaseFullOriginalTypeName}}.{{.LowercaseFunctionName}}.ok")
+defer t.End()
+{{.ReturnVarsConnected}} := {{.CallWrapped}}
+if err != nil {
+t.Set("{{.LowercaseFullOriginalTypeName}}.helloworld.err")
+return {{.ReturnVarsConnected}}
+}
+return {{.ReturnVarsConnected}}
