@@ -1,116 +1,116 @@
-package main
+package generator
 
 import (
+	"bytes"
 	"fmt"
 	"go/types"
-	"log"
-
-	"bytes"
-	"context"
 	"strings"
-
-	"os"
-
-	"text/template"
 
 	"io"
 
-	"github.com/cube2222/StatsGenerator/cmd/parser"
+	"text/template"
+
+	"github.com/cube2222/StatsGenerator/analyzer"
+	"github.com/cube2222/StatsGenerator/parser"
+	"github.com/cube2222/StatsGenerator/usertemplate"
 	"github.com/pkg/errors"
 )
 
-type MyInterface interface {
-	HelloWorld(context.Context, LocalStruct) (*privateStruct, *LocalStruct, string, error)
-	GoodbyeWorld(context.Context, int) error
-}
-
-type LocalStruct struct {
-}
-
-type privateStruct struct {
-}
-
-func main() {
-	name := "MyInterface"
-
-	sourceData, err := parser.ParseDirectory(".", name)
-	if err != nil {
-		log.Fatal(err)
+func NewWrapperGenerator(sourceData *parser.SourceData, wrapperData *analyzer.WrapperTypeData, templateData *usertemplate.TemplateData) *WrapperGenerator {
+	return &WrapperGenerator{
+		sourceData:   sourceData,
+		wrapperData:  wrapperData,
+		templateData: templateData,
+		out:          bytes.NewBuffer(nil),
 	}
+}
 
-	templateData, err := GetWrapperTemplate()
-	if err != nil {
-		log.Fatal(err)
-	}
-	tmpl := templateData.Method
+type WrapperGenerator struct {
+	sourceData   *parser.SourceData
+	wrapperData  *analyzer.WrapperTypeData
+	templateData *usertemplate.TemplateData
+	out          *bytes.Buffer
+}
 
-	// *******
+func (g *WrapperGenerator) Read(p []byte) (n int, err error) {
+	return g.out.Read(p)
+}
 
-	wrapperTypeData := GetWrapperTypeData(sourceData)
+func (g *WrapperGenerator) GetBytes() []byte {
+	return g.out.Bytes()
+}
 
-	outputBuffer := bytes.NewBuffer(nil)
+func (g *WrapperGenerator) Generate() error {
+	writePackage(g.out, g.wrapperData.Pkg)
+	writeImports(g.out, g.sourceData.Package.Imports())
+	writeUserSuppliedImports(g.out, g.templateData.Imports)
 
-	WritePackage(outputBuffer, wrapperTypeData.Pkg)
-	WriteImports(outputBuffer, sourceData.Package.Imports())
-	// WriteImports(outputBuffer, userSuppliedImports)
+	writeStructure(g.out, g.wrapperData, g.templateData.Fields)
+	writeConstructor(g.out, g.sourceData.NamedType, g.wrapperData.Pkg, g.wrapperData.NamedType, g.templateData.Fields)
 
-	for i := 0; i < sourceData.UnderlyingInterface.NumMethods(); i++ {
-		md := GetMethodData(
-			sourceData.NamedType,
-			sourceData.UnderlyingInterface.Method(i),
-			wrapperTypeData.Pkg,
-			wrapperTypeData.NamedType,
+	for i := 0; i < g.sourceData.UnderlyingInterface.NumMethods(); i++ {
+		curMethod := g.sourceData.UnderlyingInterface.Method(i)
+
+		md := getMethodData(
+			g.sourceData.NamedType,
+			curMethod,
+			g.wrapperData.Pkg,
+			g.wrapperData.NamedType,
 		)
-		WriteSignature(outputBuffer, md, sourceData.UnderlyingInterface.Method(i).Type().(*types.Signature), wrapperTypeData.Pkg, wrapperTypeData.NamedType)
-		outputBuffer.WriteString(" {\n")
-		err = tmpl.Execute(outputBuffer, md)
-		if err != nil {
-			log.Fatal(err)
-		}
-		outputBuffer.WriteString("}\n")
+
+		curSignagure := curMethod.Type().(*types.Signature)
+
+		writeMethod(g.out, md, curSignagure, g.wrapperData, g.templateData.Method)
 	}
 
-	io.Copy(os.Stdout, outputBuffer)
+	return nil
 }
 
-type WrapperTypeData struct {
-	Pkg       *types.Package
-	NamedType *types.Named
+func writeStructure(w io.Writer, wrapperType *analyzer.WrapperTypeData, userSuppliedFields []usertemplate.UserSuppliedField) {
+	tmpl := `type %s struct {
+	%s
 }
+`
 
-func GetWrapperTypeData(sourceData *parser.SourceData) *WrapperTypeData {
-	wrapperPkg := types.NewPackage("stats", "stats")
+	fields := []string{}
 
-	addImports(wrapperPkg, sourceData)
+	wrapperStructure := wrapperType.NamedType.Underlying().(*types.Struct)
 
-	// Umożliwić dodawanie nowych pól i tak samo wtedy zczytywać i dostosować konstruktor
-	wrapped := types.NewVar(0, wrapperPkg, "wrapped", sourceData.NamedType)
-
-	wrapperName := fmt.Sprintf("%s%s", sourceData.NamedType.Obj().Name(), "Stats")
-
-	newStruct := types.NewStruct([]*types.Var{wrapped}, []string{})
-
-	wrapperTypeName := types.NewTypeName(0, wrapperPkg, wrapperName, newStruct)
-	wrapperNamedType := types.NewNamed(wrapperTypeName, wrapperTypeName.Type(), nil)
-
-	return &WrapperTypeData{
-		Pkg:       wrapperPkg,
-		NamedType: wrapperNamedType,
+	buf := bytes.NewBuffer(nil)
+	types.WriteType(buf, wrapperStructure.Field(0).Type(), types.RelativeTo(wrapperType.Pkg))
+	fields = append(fields, fmt.Sprintf("%s %s", wrapperStructure.Field(0).Name(), buf.String()))
+	for _, field := range userSuppliedFields {
+		fields = append(fields, field.String())
 	}
+
+	fmt.Fprintf(w, tmpl, wrapperType.NamedType.Obj().Name(), strings.Join(fields, "\n"))
 }
 
-func addImports(wrapperPkg *types.Package, sourceData *parser.SourceData) {
-	wrapperPkg.SetImports(append(wrapperPkg.Imports(), sourceData.Package.Imports()...))
-	wrapperPkg.SetImports(append(wrapperPkg.Imports(), sourceData.Package))
+func writeMethod(w io.Writer, md *MethodData, signature *types.Signature, wrapperTypeData *analyzer.WrapperTypeData, tmpl *template.Template) error {
+	WriteSignature(w, md, signature, wrapperTypeData.Pkg, wrapperTypeData.NamedType)
+	fmt.Fprint(w, " {\n")
+	err := tmpl.Execute(w, md)
+	if err != nil {
+		return errors.Wrap(err, "couldn't execute method template")
+	}
+	fmt.Fprint(w, "}\n")
+
+	return nil
 }
 
-func WritePackage(w io.Writer, pkg *types.Package) {
+func writePackage(w io.Writer, pkg *types.Package) {
 	fmt.Fprintf(w, "package %s\n", pkg.Name())
 }
 
-func WriteImports(w io.Writer, imports []*types.Package) {
+func writeImports(w io.Writer, imports []*types.Package) {
 	for _, i := range imports {
 		fmt.Fprintf(w, "import \"%s\"\n", i.Name())
+	}
+}
+
+func writeUserSuppliedImports(w io.Writer, imports []string) {
+	for _, i := range imports {
+		fmt.Fprintf(w, "import \"%s\"\n", i)
 	}
 }
 
@@ -142,22 +142,39 @@ func WriteSignature(w io.Writer, md *MethodData, originalSignature *types.Signat
 	)
 }
 
-func GetConstructor(originalInterfaceType *types.Named, curPkg *types.Package, created *types.Named) string {
+func writeConstructor(w io.Writer, originalInterfaceType *types.Named, curPkg *types.Package, created *types.Named, userSuppliedFields []usertemplate.UserSuppliedField) {
 	constructorTemplate := `
-func New%s(wrapped %s) %s {
-	return &%s{wrapped: wrapped}
+func New%s(%s) %s {
+	return &%s{
+		%s
+	}
 }
-	`
+`
+	fieldStrings := []string{
+		fmt.Sprintf("wrapped %s", originalInterfaceType),
+	}
+	for _, field := range userSuppliedFields {
+		fieldStrings = append(fieldStrings, field.String())
+	}
+
+	initializers := []string{
+		fmt.Sprintf("wrapped: wrapped,"),
+	}
+	for _, field := range userSuppliedFields {
+		initializers = append(initializers, fmt.Sprintf("%s: %s,", field.Varname, field.Varname))
+	}
 
 	createdNameBuffer := bytes.NewBuffer(nil)
 	types.WriteType(createdNameBuffer, created, types.RelativeTo(curPkg))
 
-	return fmt.Sprintf(
+	fmt.Fprintf(
+		w,
 		constructorTemplate,
 		createdNameBuffer,
-		originalInterfaceType,
+		strings.Join(fieldStrings, ", "),
 		originalInterfaceType,
 		createdNameBuffer,
+		strings.Join(initializers, "\n"),
 	)
 }
 
@@ -214,7 +231,7 @@ type MethodData struct {
 	ZeroValuesReturnWithoutError string
 }
 
-func GetMethodData(originalInterfaceType *types.Named, originalFunction *types.Func, curPkg *types.Package, receiverType *types.Named) *MethodData {
+func getMethodData(originalInterfaceType *types.Named, originalFunction *types.Func, curPkg *types.Package, receiverType *types.Named) *MethodData {
 	md := &MethodData{}
 
 	md.FunctionName = originalFunction.Name()
@@ -285,6 +302,7 @@ func zeroValuesReturn(signature *types.Signature, curPkg *types.Package) (string
 	)
 	return zeroValuesReturn, zeroValuesReturnWithoutError
 }
+
 func getArgumentNames(signature *types.Signature) []string {
 	argumentNames := []string{}
 	for i := 0; i < signature.Params().Len(); i++ {
@@ -293,6 +311,7 @@ func getArgumentNames(signature *types.Signature) []string {
 
 	return argumentNames
 }
+
 func getReturnVarsAndCheckErrorPresent(signature *types.Signature) ([]string, bool) {
 	returnVars := []string{}
 	errorPresent := false
@@ -307,6 +326,7 @@ func getReturnVarsAndCheckErrorPresent(signature *types.Signature) ([]string, bo
 	}
 	return returnVars, errorPresent
 }
+
 func getFullOriginalTypename(originalInterfaceType *types.Named, curPkg *types.Package) string {
 	originalTypeNameBuffer := bytes.NewBuffer(nil)
 	types.WriteType(originalTypeNameBuffer, originalInterfaceType, types.RelativeTo(curPkg))
@@ -314,12 +334,14 @@ func getFullOriginalTypename(originalInterfaceType *types.Named, curPkg *types.P
 
 	return fullOriginalTypeName
 }
+
 func makeSignature(curPkg *types.Package, receiverVariableName string, receiverType *types.Named, arguments *types.Tuple, originalSignature *types.Signature) *types.Signature {
 	FunctionReceiver := types.NewVar(0, curPkg, receiverVariableName, receiverType)
 	signature := types.NewSignature(FunctionReceiver, arguments, originalSignature.Results(), false)
 
 	return signature
 }
+
 func getReceiverVariableName(receiverType *types.Named, curPkg *types.Package) string {
 	receiverVarBuffer := bytes.NewBuffer(nil)
 	types.WriteType(receiverVarBuffer, receiverType, types.RelativeTo(curPkg))
@@ -329,6 +351,7 @@ func getReceiverVariableName(receiverType *types.Named, curPkg *types.Package) s
 
 	return receiverName
 }
+
 func getArguments(originalSignature *types.Signature, curPkg *types.Package) *types.Tuple {
 	argumentVariables := []*types.Var{}
 	for i := 0; i < originalSignature.Params().Len(); i++ {
@@ -339,21 +362,7 @@ func getArguments(originalSignature *types.Signature, curPkg *types.Package) *ty
 
 	return arguments
 }
+
 func getFunctionSignature(originalFunction *types.Func) *types.Signature {
 	return originalFunction.Type().(*types.Signature)
-}
-
-type TemplateData struct {
-	Method *template.Template
-}
-
-func GetWrapperTemplate() (*TemplateData, error) {
-	tmpl, err := template.ParseFiles("stats.tmpl")
-	if err != nil {
-		return nil, errors.Wrap(err, "Couldn't open template")
-	}
-
-	return &TemplateData{
-		Method: tmpl,
-	}, nil
 }

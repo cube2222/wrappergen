@@ -1,3 +1,11 @@
+Imports:
+github.com/pkg/errors
+github.com/hello/myhello
+
+Fields:
+helloer myhello.Helloer
+
+Method:
 t := stats.NewTimer("{{.LowercaseFullOriginalTypeName}}.{{.LowercaseFunctionName}}.ok")
 defer t.End()
 {{.ReturnVarsConnected}} := {{.CallWrapped}}
