@@ -23,12 +23,12 @@ func main() {
 		OutputFilePath: *OutputFilePath,
 	}
 
-	app, err := app.NewApp(conf)
+	application, err := app.NewApp(conf)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = app.Run()
+	err = application.Run()
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -58,9 +58,9 @@ func (g *WrapperGenerator) Generate() error {
 			g.wrapperData.NamedType,
 		)
 
-		curSignagure := curMethod.Type().(*types.Signature)
+		curSignature := curMethod.Type().(*types.Signature)
 
-		writeMethod(g.out, md, curSignagure, g.wrapperData, g.templateData.Method)
+		writeMethod(g.out, md, curSignature, g.wrapperData, g.templateData.Method)
 	}
 
 	return nil

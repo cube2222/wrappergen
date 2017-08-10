@@ -9,10 +9,10 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-type PrinterConfig struct {
+type Config struct {
 }
 
-func Print(out io.Writer, data []byte, config *PrinterConfig) error {
+func Print(out io.Writer, data []byte, config *Config) error {
 	data, err := imports.Process("output.go", data, nil)
 	if err != nil {
 		return errors.Wrap(err, "couldn't prettify file")
