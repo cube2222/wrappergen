@@ -1,30 +1,26 @@
 package main
 
 import (
-	"context"
 	"log"
 
-	"os"
-
 	"github.com/cube2222/StatsGenerator/app"
+	"gopkg.in/alecthomas/kingpin.v2"
 )
 
-type MyInterface interface {
-	HelloWorld(context.Context, LocalStruct) (*privateStruct, *LocalStruct, string, error)
-	GoodbyeWorld(context.Context, int) error
-}
-
-type LocalStruct struct {
-}
-
-type privateStruct struct {
-}
+var (
+	InterfaceName  = kingpin.Flag("interface", "Interface to wrap.").Short('i').Required().String()
+	TemplatePath   = kingpin.Flag("template", "Path of wrapper template to use.").Short('t').Required().String()
+	OutputFilePath = kingpin.Flag("output", "Optional output file.").Short('o').String()
+)
 
 func main() {
+	kingpin.Version("0.0.1")
+	kingpin.Parse()
+
 	conf := &app.Config{
-		InterfaceName:  os.Args[1], //"MyInterface",
-		TemplatePath:   "stats.tmpl",
-		OutputFilePath: os.Args[2],
+		InterfaceName:  *InterfaceName,
+		TemplatePath:   *TemplatePath,
+		OutputFilePath: *OutputFilePath,
 	}
 
 	app, err := app.NewApp(conf)

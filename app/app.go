@@ -5,6 +5,8 @@ import (
 	"log"
 	"os"
 
+	"path"
+
 	"github.com/cube2222/StatsGenerator/analyzer"
 	"github.com/cube2222/StatsGenerator/generator"
 	"github.com/cube2222/StatsGenerator/parser"
@@ -31,9 +33,13 @@ func NewApp(config *Config) (*App, error) {
 	}
 
 	if config.OutputFilePath != "" {
+		err := os.MkdirAll(path.Dir(config.OutputFilePath), os.ModePerm)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Couldn't create directories for the output file %v", config.OutputFilePath)
+		}
 		file, err := os.Create(config.OutputFilePath)
 		if err != nil {
-			return nil, errors.Wrapf(err, "Couldn't create file: %v", config.OutputFilePath)
+			return nil, errors.Wrapf(err, "Couldn't create output file: %v", config.OutputFilePath)
 		}
 		a.output = file
 	} else {
