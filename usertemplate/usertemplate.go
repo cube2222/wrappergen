@@ -14,6 +14,8 @@ type TemplateData struct {
 	Fields  []UserSuppliedField
 	Imports []string
 	Method  *template.Template
+	Package string
+	Suffix  string
 }
 
 type UserSuppliedField struct {
@@ -34,19 +36,14 @@ func GetWrapperTemplate(config *WrapperTemplateConfig) (*TemplateData, error) {
 		return nil, errors.Wrap(err, "Couldn't read file")
 	}
 
-	importsIndex := bytes.Index(data, []byte("Imports:"))
-	fieldsIndex := bytes.Index(data, []byte("Fields:"))
-	methodIndex := bytes.Index(data, []byte("Method:"))
-	importsPart := bytes.TrimPrefix(data[importsIndex:fieldsIndex], []byte("Imports:"))
-	fieldsPart := bytes.TrimPrefix(data[fieldsIndex:methodIndex], []byte("Fields:"))
-	methodPart := bytes.TrimPrefix(data[methodIndex:], []byte("Method:"))
+	packagePart := getField(data, []byte("Package"), []byte("Suffix"))
 
-	importsPart = bytes.Replace(importsPart, []byte("\r"), []byte{}, -1)
-	importsPart = bytes.Trim(importsPart, "\r\n ")
+	suffixPart := getField(data, []byte("Suffix"), []byte("Imports"))
+
+	importsPart := getField(data, []byte("Imports"), []byte("Fields"))
 	imports := strings.Split(string(importsPart), "\n")
 
-	fieldsPart = bytes.Replace(fieldsPart, []byte("\r"), []byte{}, -1)
-	fieldsPart = bytes.Trim(fieldsPart, "\r\n ")
+	fieldsPart := getField(data, []byte("Fields"), []byte("Method"))
 	fieldsStrings := bytes.Split(fieldsPart, []byte("\n"))
 	fields := []UserSuppliedField{}
 	for _, fieldString := range fieldsStrings {
@@ -60,8 +57,7 @@ func GetWrapperTemplate(config *WrapperTemplateConfig) (*TemplateData, error) {
 		})
 	}
 
-	methodPart = bytes.Replace(methodPart, []byte("\r"), []byte{}, -1)
-	methodPart = bytes.Trim(methodPart, "\r\n ")
+	methodPart := getField(data, []byte("Method"), nil)
 	tmpl, err := template.New("method").Parse(string(methodPart))
 	if err != nil {
 		return nil, errors.Wrap(err, "Couldn't parse template")
@@ -71,5 +67,26 @@ func GetWrapperTemplate(config *WrapperTemplateConfig) (*TemplateData, error) {
 		Imports: imports,
 		Fields:  fields,
 		Method:  tmpl,
+		Package: string(packagePart),
+		Suffix:  string(suffixPart),
 	}, nil
+}
+
+func getField(data []byte, field []byte, nextField []byte) []byte {
+	key := bytes.Join([][]byte{field, []byte(":")}, nil)
+	valueIndex := bytes.Index(data, key)
+
+	var value []byte
+	if nextField != nil {
+		endKey := bytes.Join([][]byte{nextField, []byte(":")}, nil)
+		valueEndIndex := bytes.Index(data, endKey)
+		value = bytes.TrimPrefix(data[valueIndex:valueEndIndex], key)
+	} else {
+		value = bytes.TrimPrefix(data[valueIndex:], key)
+	}
+
+	value = bytes.Replace(value, []byte("\r"), []byte{}, -1)
+	value = bytes.Trim(value, "\r\n ")
+
+	return value
 }

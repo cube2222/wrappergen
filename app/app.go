@@ -65,7 +65,7 @@ func (a *App) Run() error {
 		log.Fatal(err)
 	}
 
-	wrapperTypeData := analyzer.GetWrapperTypeData(sourceData)
+	wrapperTypeData := analyzer.GetWrapperTypeData(sourceData, templateData)
 
 	g := generator.NewWrapperGenerator(sourceData, wrapperTypeData, templateData)
 	g.Generate()

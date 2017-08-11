@@ -1,3 +1,9 @@
+PackageName:
+wrappers
+
+TypeSuffix:
+Stats
+
 Imports:
 github.com/prometheus/client_golang/prometheus
 
@@ -8,9 +14,9 @@ Method:
 {{.ReturnVarsConnected}} := {{.CallWrapped}}
 {{if .ErrorPresent}}
 if err != nil {
-{{.ReceiverVar}}.counter.With(prometheus.Labels{"function":"{{.LowercaseFunctionName}}","success":"error"}).Inc()
+{{.ReceiverVar}}.counter.With(prometheus.Labels{"function":"{{.LowercaseFullOriginalTypeName}}.{{.LowercaseFunctionName}}","status":"error"}).Inc()
 return {{.ReturnVarsConnected}}
 }
 {{end}}
-{{.ReceiverVar}}.counter.With(prometheus.Labels{"function":"{{.LowercaseFunctionName}}","success":"success"}).Inc()
+{{.ReceiverVar}}.counter.With(prometheus.Labels{"function":"{{.LowercaseFullOriginalTypeName}}.{{.LowercaseFunctionName}}","status":"success"}).Inc()
 return {{.ReturnVarsConnected}}

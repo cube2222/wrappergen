@@ -5,6 +5,7 @@ import (
 	"go/types"
 
 	"github.com/cube2222/StatsGenerator/parser"
+	"github.com/cube2222/StatsGenerator/usertemplate"
 )
 
 type WrapperTypeData struct {
@@ -12,15 +13,15 @@ type WrapperTypeData struct {
 	NamedType *types.Named
 }
 
-func GetWrapperTypeData(sourceData *parser.SourceData) *WrapperTypeData {
-	wrapperPkg := types.NewPackage("stats", "stats")
+func GetWrapperTypeData(sourceData *parser.SourceData, templateData *usertemplate.TemplateData) *WrapperTypeData {
+	wrapperPkg := types.NewPackage(templateData.Package, templateData.Package)
 
 	addImports(wrapperPkg, sourceData)
 
 	// Umożliwić dodawanie nowych pól i tak samo wtedy zczytywać i dostosować konstruktor
 	wrapped := types.NewVar(0, wrapperPkg, "wrapped", sourceData.NamedType)
 
-	wrapperName := fmt.Sprintf("%s%s", sourceData.NamedType.Obj().Name(), "Stats")
+	wrapperName := fmt.Sprintf("%s%s", sourceData.NamedType.Obj().Name(), templateData.Suffix)
 
 	newStruct := types.NewStruct([]*types.Var{wrapped}, []string{})
 

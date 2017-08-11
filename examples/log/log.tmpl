@@ -1,0 +1,30 @@
+Package:
+wrappers
+
+Suffix:
+Logs
+
+Imports:
+go.uber.org/zap
+
+Fields:
+log *zap.Logger
+
+Method:
+start := time.Now()
+{{.ReturnVarsConnected}} := {{.CallWrapped}}
+{{if .ErrorPresent}}
+if err != nil {
+{{.ReceiverVar}}.log.With(
+zap.String("Function", "{{.ShortOriginalTypeName}}.{{.FunctionName}}"),
+zap.Duration("Duration", time.Since(start)),
+zap.String("ErrorMessage", err.Error()),
+).Warn("Error")
+return {{.ReturnVarsConnected}}
+}
+{{end}}
+{{.ReceiverVar}}.log.With(
+zap.String("Function", "{{.ShortOriginalTypeName}}.{{.FunctionName}}"),
+zap.Duration("Duration", time.Since(start)),
+).Info("Success")
+return {{.ReturnVarsConnected}}
