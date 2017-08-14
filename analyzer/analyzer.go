@@ -18,7 +18,6 @@ func GetWrapperTypeData(sourceData *parser.SourceData, templateData *usertemplat
 
 	addImports(wrapperPkg, sourceData)
 
-	// Umożliwić dodawanie nowych pól i tak samo wtedy zczytywać i dostosować konstruktor
 	wrapped := types.NewVar(0, wrapperPkg, "wrapped", sourceData.NamedType)
 
 	wrapperName := fmt.Sprintf("%s%s", sourceData.NamedType.Obj().Name(), templateData.Suffix)
